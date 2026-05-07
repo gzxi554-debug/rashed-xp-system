@@ -78,5 +78,6 @@ client.on("messageReactionAdd", async (reaction, user) => {
     console.error("Reaction approval error:", error);
   }
 });
-
+console.log("TOKEN EXISTS:", !!DISCORD_TOKEN);
+console.log("TOKEN LENGTH:", DISCORD_TOKEN ? DISCORD_TOKEN.length : 0);
 client.login(DISCORD_TOKEN);
