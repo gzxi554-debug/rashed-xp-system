@@ -25,11 +25,13 @@ client.once("ready", () => {
 });
 
 client.on("messageReactionAdd", async (reaction, user) => {
-  try {console.log("REACTION EVENT FIRED");
-console.log("Emoji:", reaction.emoji.name);
-console.log("User ID:", user.id);
-console.log("Channel ID:", reaction.message.channel.id);
-    if (user.bot) return;
+  try {
+    console.log("REACTION EVENT FIRED");
+
+    if (user.bot) {
+      console.log("STOPPED: reactor is a bot");
+      return;
+    }
 
     if (reaction.partial) await reaction.fetch();
     if (reaction.message.partial) await reaction.message.fetch();
@@ -37,16 +39,72 @@ console.log("Channel ID:", reaction.message.channel.id);
     const emoji = reaction.emoji.name;
     const channelId = reaction.message.channel.id;
 
-    if (emoji !== APPROVAL_EMOJI) return;
-    if (channelId !== SUBMISSIONS_CHANNEL_ID) return;
+    console.log("Emoji:", emoji);
+    console.log("Channel ID:", channelId);
+    console.log("Expected Channel ID:", SUBMISSIONS_CHANNEL_ID);
+    console.log("Webhook URL exists:", !!N8N_WEBHOOK_URL);
+
+    if (emoji !== APPROVAL_EMOJI) {
+      console.log("STOPPED: emoji does not match");
+      return;
+    }
+
+    if (channelId !== SUBMISSIONS_CHANNEL_ID) {
+      console.log("STOPPED: channel does not match");
+      return;
+    }
 
     const submitter = reaction.message.author;
 
-    if (!submitter || submitter.bot) return;
+    if (!submitter) {
+      console.log("STOPPED: no submitter found");
+      return;
+    }
+
+    if (submitter.bot) {
+      console.log("STOPPED: submitter is a bot");
+      return;
+    }
 
     const attachments = Array.from(reaction.message.attachments.values()).map(
       (attachment) => attachment.url
     );
+
+    const payload = {
+      type: "xp_approval",
+      emoji,
+      reactor_id: user.id,
+      reactor_username: user.username,
+      message_id: reaction.message.id,
+      channel_id: channelId,
+      submitter_id: submitter.id,
+      submitter_username: submitter.username,
+      content: reaction.message.content || "",
+      attachments
+    };
+
+    console.log("Sending XP approval to n8n:", payload);
+
+    const response = await fetch(N8N_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    console.log("n8n response status:", response.status);
+
+    if (!response.ok) {
+      console.error("n8n webhook failed:", response.status, await response.text());
+      return;
+    }
+
+    console.log(`✅ XP approval sent for ${submitter.username}`);
+  } catch (error) {
+    console.error("Reaction approval error:", error);
+  }
+});
 
     const payload = {
       type: "xp_approval",
