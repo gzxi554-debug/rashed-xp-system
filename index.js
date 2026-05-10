@@ -230,8 +230,10 @@ const data = await response.json();
 
 console.log("n8n response data:", data);
 
-if (data.rank) {
-  await syncRankRole(reaction.message.guild, submitter.id, data.rank);
+const rank = data.rank?.trim();
+
+if (rank) {
+  await syncRankRole(reaction.message.guild, submitter.id, rank);
 }
 
 console.log(`✅ ${submitter.username} earned ${challenge.xp} XP for ${challenge.name}`);
