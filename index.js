@@ -39,9 +39,6 @@ async function syncRankRole(guild, userId, rank) {
 
   console.log(`✅ Synced rank role for ${userId}: ${rank}`);
 }
-
-client.once("ready", () => {
-
 const challenges = [
   { game: "Fortnite", name: "Survive 10 minutes", xp: 50 },
   { game: "Fortnite", name: "Deal 300 damage", xp: 50 },
