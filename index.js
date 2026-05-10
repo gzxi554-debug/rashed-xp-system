@@ -6,6 +6,16 @@ const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
 const SUBMISSIONS_CHANNEL_ID = "1501823063694770206";
 const APPROVAL_EMOJI = "✅";
 
+const rankRoles = {
+  "Rookie": "1503078261150974092",
+  "Grinder": "1503078939864862932",
+  "Contender": "1503079208124027100",
+  "Vanguard": "1503079523867168788",
+  "Ascendant": "1503079798489092136",
+  "Champion": "1503080883039506645",
+  "GE Legend": "1503080595675283621"
+};
+
 const challenges = [
   { game: "Fortnite", name: "Survive 10 minutes", xp: 50 },
   { game: "Fortnite", name: "Deal 300 damage", xp: 50 },
