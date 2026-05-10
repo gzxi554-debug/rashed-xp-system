@@ -28,10 +28,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
   try {
     console.log("REACTION EVENT FIRED");
 
-    if (user.bot) {
-      console.log("STOPPED: reactor is a bot");
-      return;
-    }
+    if (user.bot) return;
 
     if (reaction.partial) await reaction.fetch();
     if (reaction.message.partial) await reaction.message.fetch();
@@ -39,29 +36,26 @@ client.on("messageReactionAdd", async (reaction, user) => {
     const emoji = reaction.emoji.name;
     const channelId = reaction.message.channel.id;
 
-    console.log("Emoji:", emoji);
-    console.log("Channel ID:", channelId);
-    console.log("Expected Channel ID:", SUBMISSIONS_CHANNEL_ID);
-    console.log("Webhook URL exists:", !!N8N_WEBHOOK_URL);
-
-    if (emoji !== APPROVAL_EMOJI) {
-      console.log("STOPPED: emoji does not match");
-      return;
-    }
-
-    if (channelId !== SUBMISSIONS_CHANNEL_ID) {
-      console.log("STOPPED: channel does not match");
-      return;
-    }
+    if (emoji !== APPROVAL_EMOJI) return;
+    if (channelId !== SUBMISSIONS_CHANNEL_ID) return;
 
     const submitter = reaction.message.author;
 
-    if (!submitter || submitter.bot) {
-      console.log("STOPPED: invalid submitter");
-      return;
-    }
+    if (!submitter || submitter.bot) return;
 
-    const attachments = Array.from(reaction.message.attachments.values()).map(a => a.url);
+    const content = reaction.message.content || "";
+
+    const xpMatch = content.match(/\[XP:\s*(\d+)\]/i);
+    const challengeXp = xpMatch ? Number(xpMatch[1]) : 100;
+
+    const challengeMatch = content.match(/\[Challenge:\s*(.+?)\]/i);
+    const challengeName = challengeMatch
+      ? challengeMatch[1].trim()
+      : "Unknown Challenge";
+
+    const attachments = Array.from(
+      reaction.message.attachments.values()
+    ).map(a => a.url);
 
     const payload = {
       type: "xp_approval",
@@ -72,7 +66,9 @@ client.on("messageReactionAdd", async (reaction, user) => {
       channel_id: channelId,
       submitter_id: submitter.id,
       submitter_username: submitter.username,
-      content: reaction.message.content || "",
+      content,
+      challenge_name: challengeName,
+      xp: challengeXp,
       attachments
     };
 
