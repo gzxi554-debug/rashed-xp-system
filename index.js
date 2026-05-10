@@ -16,6 +16,32 @@ const rankRoles = {
   "GE Legend": "1503080595675283621"
 };
 
+async function syncRankRole(guild, userId, rank) {
+  const member = await guild.members.fetch(userId);
+  const newRoleId = rankRoles[rank];
+
+  if (!newRoleId) {
+    console.log("No role found for rank:", rank);
+    return;
+  }
+
+  const allRankRoleIds = Object.values(rankRoles);
+
+  for (const roleId of allRankRoleIds) {
+    if (member.roles.cache.has(roleId) && roleId !== newRoleId) {
+      await member.roles.remove(roleId);
+    }
+  }
+
+  if (!member.roles.cache.has(newRoleId)) {
+    await member.roles.add(newRoleId);
+  }
+
+  console.log(`✅ Synced rank role for ${userId}: ${rank}`);
+}
+
+client.once("ready", () => {
+
 const challenges = [
   { game: "Fortnite", name: "Survive 10 minutes", xp: 50 },
   { game: "Fortnite", name: "Deal 300 damage", xp: 50 },
@@ -196,14 +222,22 @@ client.on("messageReactionAdd", async (reaction, user) => {
       body: JSON.stringify(payload)
     });
 
-    console.log("n8n response status:", response.status);
+  console.log("n8n response status:", response.status);
 
-    if (!response.ok) {
-      console.error("n8n webhook failed:", response.status, await response.text());
-      return;
-    }
+if (!response.ok) {
+  console.error("n8n webhook failed:", response.status, await response.text());
+  return;
+}
 
-    console.log(`✅ ${submitter.username} earned ${challenge.xp} XP for ${challenge.name}`);
+const data = await response.json();
+
+console.log("n8n response data:", data);
+
+if (data.rank) {
+  await syncRankRole(reaction.message.guild, submitter.id, data.rank);
+}
+
+console.log(`✅ ${submitter.username} earned ${challenge.xp} XP for ${challenge.name}`);
   } catch (error) {
     console.error("Reaction approval error:", error);
   }
