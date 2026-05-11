@@ -291,7 +291,7 @@ client.on("messageCreate", async (message) => {
       embeds: [
         {
           color: 0x00D1FF,
-          title: `🎮 ${data.username}'s Profile`,
+          title: `🎮 ${message.member?.displayName || message.author.username}'s Profile`,
           description:
 `🏅 Rank: ${data.rank}
 🎖️ Level: ${data.level}
