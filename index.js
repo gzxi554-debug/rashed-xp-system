@@ -263,7 +263,7 @@ client.on("messageCreate", async (message) => {
 
     if (message.content.toLowerCase() !== "/profile") return;
 
-    const response = await fetch(N8N_PROFILE_WEBHOOK_URL, {
+    const response = await fetch("https://gamersera.app.n8n.cloud/webhook/profile", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
