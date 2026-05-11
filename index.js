@@ -256,5 +256,55 @@ console.log(`✅ ${submitter.username} earned ${challenge.xp} XP for ${challenge
     console.error("Reaction approval error:", error);
   }
 });
+client.on("messageCreate", async (message) => {
+  try {
+    if (message.author.bot) return;
 
+    if (message.content.toLowerCase() !== "/profile") return;
+
+    const response = await fetch(`${N8N_WEBHOOK_URL}/profile`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        user_id: message.author.id
+      })
+    });
+
+    if (!response.ok) {
+      await message.reply("❌ Failed to load profile.");
+      return;
+    }
+
+    const data = await response.json();
+
+    const currentXP = Number(data.total_xp || 0);
+    const currentLevelXP = Math.floor(currentXP / 500) * 500;
+    const nextLevelXP = currentLevelXP + 500;
+
+    const progress = currentXP - currentLevelXP;
+    const percentage = Math.floor((progress / 500) * 100);
+
+    await message.reply({
+      embeds: [
+        {
+          color: 0x00D1FF,
+          title: `🎮 ${data.username}'s Profile`,
+          description:
+`🏅 Rank: ${data.rank}
+🎖️ Level: ${data.level}
+⚡ Total XP: ${data.total_xp}
+✅ Challenges Completed: ${data.challenges_completed}
+
+📈 Progress to next level:
+${progress}/500 XP (${percentage}%)`
+        }
+      ]
+    });
+
+  } catch (err) {
+    console.error("PROFILE ERROR:", err);
+  }
+});
 client.login(DISCORD_TOKEN);
