@@ -17,27 +17,42 @@ const rankRoles = {
 };
 
 async function syncRankRole(guild, userId, rank) {
-  const member = await guild.members.fetch(userId);
-  const newRoleId = rankRoles[rank];
+  try {
+    console.log("SYNCING ROLE");
+    console.log("User ID:", userId);
+    console.log("Rank:", rank);
 
-  if (!newRoleId) {
-    console.log("No role found for rank:", rank);
-    return;
-  }
+    const member = await guild.members.fetch(userId);
 
-  const allRankRoleIds = Object.values(rankRoles);
+    console.log("Found member:", member.user.username);
 
-  for (const roleId of allRankRoleIds) {
-    if (member.roles.cache.has(roleId) && roleId !== newRoleId) {
-      await member.roles.remove(roleId);
+    const newRoleId = rankRoles[rank];
+
+    console.log("Role ID:", newRoleId);
+
+    if (!newRoleId) {
+      console.log("No role found for rank:", rank);
+      return;
     }
-  }
 
-  if (!member.roles.cache.has(newRoleId)) {
-    await member.roles.add(newRoleId);
-  }
+    const allRankRoleIds = Object.values(rankRoles);
 
-  console.log(`✅ Synced rank role for ${userId}: ${rank}`);
+    for (const roleId of allRankRoleIds) {
+      if (member.roles.cache.has(roleId) && roleId !== newRoleId) {
+        console.log("Removing role:", roleId);
+        await member.roles.remove(roleId);
+      }
+    }
+
+    if (!member.roles.cache.has(newRoleId)) {
+      console.log("Adding role:", newRoleId);
+      await member.roles.add(newRoleId);
+    }
+
+    console.log(`✅ Synced rank role for ${userId}: ${rank}`);
+  } catch (err) {
+    console.error("ROLE SYNC ERROR:", err);
+  }
 }
 const challenges = [
   { game: "Fortnite", name: "Survive 10 minutes", xp: 50 },
