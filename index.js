@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits, Partials } = require("discord.js");
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
+const N8N_PROFILE_WEBHOOK_URL = process.env.N8N_PROFILE_WEBHOOK_URL;
 
 const SUBMISSIONS_CHANNEL_ID = "1501823063694770206";
 const APPROVAL_EMOJI = "✅";
@@ -262,7 +263,7 @@ client.on("messageCreate", async (message) => {
 
     if (message.content.toLowerCase() !== "/profile") return;
 
-    const response = await fetch(`${N8N_WEBHOOK_URL}/profile`, {
+    const response = await fetch(N8N_PROFILE_WEBHOOK_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
