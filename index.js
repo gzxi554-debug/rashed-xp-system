@@ -261,7 +261,7 @@ client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
 
-    if (message.content.toLowerCase() !== "/profile") return;
+    if (message.content.toLowerCase() !== "/geprofile") return;
 
     const response = await fetch("https://gamersera.app.n8n.cloud/webhook/profile", {
       method: "POST",
