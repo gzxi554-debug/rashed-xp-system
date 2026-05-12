@@ -174,6 +174,8 @@ const client = new Client({
 
 client.once("ready", () => {
   console.log(`✅ XP Reaction Bot is online as ${client.user.tag}`);
+
+  postDailyShop();
 });
 
 client.on("messageReactionAdd", async (reaction, user) => {
@@ -313,6 +315,102 @@ ${progress}/500 XP (${percentage}%)`
 
   } catch (err) {
     console.error("PROFILE ERROR:", err);
+  }
+});
+async function postDailyShop() {
+  try {
+    const response = await fetch("https://gamersera.app.n8n.cloud/webhook/shop");
+    const data = await response.json();
+
+    const channel = await client.channels.fetch("1501628913435152615");
+
+    if (!channel) return;
+
+    await channel.send({
+      content: "## 🪙 Daily GE Token Shop"
+    });
+
+    for (const item of data.items) {
+      const embed = {
+        title: item.item_name,
+        description:
+`🏷️ ${item.category}
+
+🪙 ${item.cost} GE Tokens
+
+${item.description}`,
+        color: item.category === "Featured Item" ? 0xFFD700 : 0x00D1FF,
+        image: {
+          url: item.image_url
+        },
+        footer: {
+          text: `Item ID: ${item.item_id}`
+        }
+      };
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`buy_${item.item_id}`)
+          .setLabel("Buy Item")
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await channel.send({
+        embeds: [embed],
+        components: [row]
+      });
+    }
+  } catch (err) {
+    console.error("SHOP ERROR:", err);
+  }
+}
+client.on("interactionCreate", async (interaction) => {
+  try {
+    if (!interaction.isButton()) return;
+
+    if (!interaction.customId.startsWith("buy_")) return;
+
+    const itemId = interaction.customId.replace("buy_", "");
+
+    const response = await fetch("https://gamersera.app.n8n.cloud/webhook/shop), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        user_id: interaction.user.id,
+        username: interaction.user.username,
+        item_id: itemId
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      await interaction.reply({
+        content: `❌ ${data.message}`,
+        ephemeral: true
+      });
+
+      return;
+    }
+
+    await interaction.reply({
+      content:
+`✅ Successfully purchased **${itemId}**
+🪙 New Balance: ${data.new_balance} GE Tokens`,
+      ephemeral: true
+    });
+
+  } catch (err) {
+    console.error("BUY BUTTON ERROR:", err);
+
+    if (!interaction.replied) {
+      await interaction.reply({
+        content: "❌ Purchase failed.",
+        ephemeral: true
+      });
+    }
   }
 });
 client.login(DISCORD_TOKEN);
