@@ -438,19 +438,37 @@ client.on("interactionCreate", async (interaction) => {
       })
     });
 
+    const rawText = await response.text();
+    console.log("Purchase webhook status:", response.status);
+    console.log("Purchase webhook raw response:", rawText);
+
     if (!response.ok) {
       await interaction.reply({
-        content: "❌ Purchase system error.",
+        content: "❌ Purchase system error. Check n8n purchase workflow.",
         ephemeral: true
       });
       return;
     }
 
-    const data = await response.json();
+    let data;
 
-    if (!data.success) {
+    try {
+      data = JSON.parse(rawText);
+    } catch (err) {
+      console.error("Purchase webhook did not return JSON:", rawText);
+
       await interaction.reply({
-        content: `❌ ${data.message}`,
+        content: "❌ Purchase system returned an invalid response. Check n8n Respond to Webhook node.",
+        ephemeral: true
+      });
+      return;
+    }
+
+    const success = data.success === true || data.success === "true";
+
+    if (!success) {
+      await interaction.reply({
+        content: `❌ ${data.message || "Purchase failed."}`,
         ephemeral: true
       });
       return;
@@ -458,14 +476,14 @@ client.on("interactionCreate", async (interaction) => {
 
     await interaction.reply({
       content:
-`✅ ${data.message}
+`✅ ${data.message || `Successfully purchased ${itemId}.`}
 🪙 New Balance: ${data.new_balance} GE Tokens`,
       ephemeral: true
     });
   } catch (err) {
     console.error("BUY BUTTON ERROR:", err);
 
-    if (!interaction.replied) {
+    if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: "❌ Purchase failed.",
         ephemeral: true
