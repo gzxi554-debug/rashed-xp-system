@@ -63,6 +63,42 @@ async function syncRankRole(guild, userId, rank) {
   }
 }
 
+async function clearChannelMessages(channel) {
+  try {
+    const messages = await channel.messages.fetch({ limit: 100 });
+
+    if (messages.size > 0) {
+      await channel.bulkDelete(messages, true);
+      console.log(`🧹 Cleared ${messages.size} messages from ${channel.name}`);
+    }
+  } catch (err) {
+    console.error("CLEAR CHANNEL ERROR:", err);
+  }
+}
+
+function scheduleDailyShop() {
+  const now = new Date();
+  const target = new Date();
+
+  target.setHours(23, 0, 0, 0); // 11:00 PM server/Railway time
+
+  if (now > target) {
+    target.setDate(target.getDate() + 1);
+  }
+
+  const delay = target.getTime() - now.getTime();
+
+  console.log(`🕒 Daily shop scheduled in ${Math.floor(delay / 1000)} seconds`);
+
+  setTimeout(() => {
+    postDailyShop();
+
+    setInterval(() => {
+      postDailyShop();
+    }, 24 * 60 * 60 * 1000);
+  }, delay);
+}
+
 const challenges = [
   { game: "Fortnite", name: "Survive 10 minutes", xp: 50 },
   { game: "Fortnite", name: "Deal 300 damage", xp: 50 },
@@ -177,9 +213,8 @@ const client = new Client({
 client.once("ready", () => {
   console.log(`✅ XP Reaction Bot is online as ${client.user.tag}`);
 
-  // Posts the shop whenever the bot starts.
-  // Later we can replace this with a true daily timer.
   postDailyShop();
+  scheduleDailyShop();
 });
 
 client.on("messageReactionAdd", async (reaction, user) => {
@@ -341,6 +376,8 @@ async function postDailyShop() {
 
     const channel = await client.channels.fetch(SHOP_CHANNEL_ID);
     if (!channel) return;
+
+    await clearChannelMessages(channel);
 
     await channel.send({
       content: "## 🪙 Daily GE Token Shop\nClick **Buy Item** under any reward to purchase privately."
