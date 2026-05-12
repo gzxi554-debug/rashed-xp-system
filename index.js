@@ -6,12 +6,18 @@ const {
   ButtonBuilder,
   ButtonStyle
 } = require("discord.js");
+
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
 const N8N_PROFILE_WEBHOOK_URL = process.env.N8N_PROFILE_WEBHOOK_URL;
 
 const SUBMISSIONS_CHANNEL_ID = "1501823063694770206";
+const SHOP_CHANNEL_ID = "1501628913435152615";
 const APPROVAL_EMOJI = "✅";
+
+const DAILY_SHOP_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/dailyshop";
+const PURCHASE_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/shop";
+const PROFILE_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/profile";
 
 const rankRoles = {
   "Rookie": "1503078261150974092",
@@ -30,12 +36,7 @@ async function syncRankRole(guild, userId, rank) {
     console.log("Rank:", rank);
 
     const member = await guild.members.fetch(userId);
-
-    console.log("Found member:", member.user.username);
-
     const newRoleId = rankRoles[rank];
-
-    console.log("Role ID:", newRoleId);
 
     if (!newRoleId) {
       console.log("No role found for rank:", rank);
@@ -61,6 +62,7 @@ async function syncRankRole(guild, userId, rank) {
     console.error("ROLE SYNC ERROR:", err);
   }
 }
+
 const challenges = [
   { game: "Fortnite", name: "Survive 10 minutes", xp: 50 },
   { game: "Fortnite", name: "Deal 300 damage", xp: 50 },
@@ -175,6 +177,8 @@ const client = new Client({
 client.once("ready", () => {
   console.log(`✅ XP Reaction Bot is online as ${client.user.tag}`);
 
+  // Posts the shop whenever the bot starts.
+  // Later we can replace this with a true daily timer.
   postDailyShop();
 });
 
@@ -243,35 +247,35 @@ client.on("messageReactionAdd", async (reaction, user) => {
       body: JSON.stringify(payload)
     });
 
-  console.log("n8n response status:", response.status);
+    console.log("n8n response status:", response.status);
 
-if (!response.ok) {
-  console.error("n8n webhook failed:", response.status, await response.text());
-  return;
-}
+    if (!response.ok) {
+      console.error("n8n webhook failed:", response.status, await response.text());
+      return;
+    }
 
-const data = await response.json();
+    const data = await response.json();
+    console.log("n8n response data:", data);
 
-console.log("n8n response data:", data);
+    const rank = data.rank?.trim();
 
-const rank = data.rank?.trim();
+    if (rank) {
+      await syncRankRole(reaction.message.guild, submitter.id, rank);
+    }
 
-if (rank) {
-  await syncRankRole(reaction.message.guild, submitter.id, rank);
-}
-
-console.log(`✅ ${submitter.username} earned ${challenge.xp} XP for ${challenge.name}`);
+    console.log(`✅ ${submitter.username} earned ${challenge.xp} XP for ${challenge.name}`);
   } catch (error) {
     console.error("Reaction approval error:", error);
   }
 });
+
 client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
 
     if (message.content.toLowerCase() !== "/geprofile") return;
 
-    const response = await fetch("https://gamersera.app.n8n.cloud/webhook/profile", {
+    const response = await fetch(PROFILE_WEBHOOK_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -290,8 +294,6 @@ client.on("messageCreate", async (message) => {
 
     const currentXP = Number(data.total_xp || 0);
     const currentLevelXP = Math.floor(currentXP / 500) * 500;
-    const nextLevelXP = currentLevelXP + 500;
-
     const progress = currentXP - currentLevelXP;
     const percentage = Math.floor((progress / 500) * 100);
 
@@ -312,22 +314,36 @@ ${progress}/500 XP (${percentage}%)`
         }
       ]
     });
-
   } catch (err) {
     console.error("PROFILE ERROR:", err);
   }
 });
+
 async function postDailyShop() {
   try {
-    const response = await fetch("https://gamersera.app.n8n.cloud/webhook/shop");
+    const response = await fetch(DAILY_SHOP_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: "discord_bot" })
+    });
+
+    if (!response.ok) {
+      console.error("Daily shop webhook failed:", response.status, await response.text());
+      return;
+    }
+
     const data = await response.json();
 
-    const channel = await client.channels.fetch("1501628913435152615");
+    if (!Array.isArray(data.items) || data.items.length === 0) {
+      console.log("No shop items returned from n8n.");
+      return;
+    }
 
+    const channel = await client.channels.fetch(SHOP_CHANNEL_ID);
     if (!channel) return;
 
     await channel.send({
-      content: "## 🪙 Daily GE Token Shop"
+      content: "## 🪙 Daily GE Token Shop\nClick **Buy Item** under any reward to purchase privately."
     });
 
     for (const item of data.items) {
@@ -340,13 +356,14 @@ async function postDailyShop() {
 
 ${item.description}`,
         color: item.category === "Featured Item" ? 0xFFD700 : 0x00D1FF,
-        image: {
-          url: item.image_url
-        },
         footer: {
           text: `Item ID: ${item.item_id}`
         }
       };
+
+      if (item.image_url) {
+        embed.image = { url: item.image_url };
+      }
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -364,15 +381,15 @@ ${item.description}`,
     console.error("SHOP ERROR:", err);
   }
 }
+
 client.on("interactionCreate", async (interaction) => {
   try {
     if (!interaction.isButton()) return;
-
     if (!interaction.customId.startsWith("buy_")) return;
 
     const itemId = interaction.customId.replace("buy_", "");
 
-    const response = await fetch("https://gamersera.app.n8n.cloud/webhook/shop", { 
+    const response = await fetch(PURCHASE_WEBHOOK_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -384,6 +401,14 @@ client.on("interactionCreate", async (interaction) => {
       })
     });
 
+    if (!response.ok) {
+      await interaction.reply({
+        content: "❌ Purchase system error.",
+        ephemeral: true
+      });
+      return;
+    }
+
     const data = await response.json();
 
     if (!data.success) {
@@ -391,17 +416,15 @@ client.on("interactionCreate", async (interaction) => {
         content: `❌ ${data.message}`,
         ephemeral: true
       });
-
       return;
     }
 
     await interaction.reply({
       content:
-`✅ Successfully purchased **${itemId}**
+`✅ ${data.message}
 🪙 New Balance: ${data.new_balance} GE Tokens`,
       ephemeral: true
     });
-
   } catch (err) {
     console.error("BUY BUTTON ERROR:", err);
 
@@ -413,4 +436,6 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 });
+
 client.login(DISCORD_TOKEN);
+
