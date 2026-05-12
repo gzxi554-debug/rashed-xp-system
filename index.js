@@ -296,6 +296,7 @@ client.on("messageCreate", async (message) => {
 `🏅 Rank: ${data.rank}
 🎖️ Level: ${data.level}
 ⚡ Total XP: ${data.total_xp}
+🪙 GE Tokens: ${data.ge_tokens}
 ✅ Challenges Completed: ${data.challenges_completed}
 
 📈 Progress to next level:
