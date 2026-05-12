@@ -372,7 +372,7 @@ client.on("interactionCreate", async (interaction) => {
 
     const itemId = interaction.customId.replace("buy_", "");
 
-    const response = await fetch("https://gamersera.app.n8n.cloud/webhook/shop), {
+    const response = await fetch("https://gamersera.app.n8n.cloud/webhook/shop", { 
       method: "POST",
       headers: {
         "Content-Type": "application/json"
