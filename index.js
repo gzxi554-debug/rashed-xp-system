@@ -423,6 +423,69 @@ ${item.description}`,
 client.on("interactionCreate", async (interaction) => {
   try {
     if (!interaction.isButton()) return;
+
+    if (interaction.customId.startsWith("delivered_")) {
+      const parts = interaction.customId.split("_");
+      const userId = parts[1];
+      const itemId = parts.slice(2).join("_");
+
+      await interaction.deferReply({ ephemeral: true });
+
+      const oldEmbed = interaction.message.embeds[0];
+      const oldDescription = oldEmbed?.description || "";
+
+      const deliveredDescription = oldDescription.replace(
+        "⏳ Status: Pending Delivery",
+        `✅ Status: Delivered
+👮 Delivered By: <@${interaction.user.id}>`
+      );
+
+      const disabledRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`delivered_done_${userId}_${itemId}`)
+          .setLabel("Delivered")
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(true)
+      );
+
+      await interaction.message.edit({
+        embeds: [
+          {
+            color: 0x2ECC71,
+            title: "✅ Shop Purchase Delivered",
+            description: deliveredDescription
+          }
+        ],
+        components: [disabledRow]
+      });
+
+      try {
+        const buyer = await client.users.fetch(userId);
+        await buyer.send({
+          embeds: [
+            {
+              color: 0x2ECC71,
+              title: "✅ Your GE Shop Reward Was Delivered",
+              description:
+`Your purchase has been marked as delivered by the GamersEra team.
+
+📦 Item ID: ${itemId}
+
+Thank you for using the GE Token Shop!`
+            }
+          ]
+        });
+      } catch (err) {
+        console.log("Could not DM user delivery confirmation.");
+      }
+
+      await interaction.editReply({
+        content: "✅ Purchase marked as delivered."
+      });
+
+      return;
+    }
+
     if (!interaction.customId.startsWith("buy_")) return;
 
     const itemId = interaction.customId.replace("buy_", "");
@@ -496,7 +559,7 @@ client.on("interactionCreate", async (interaction) => {
 🪙 Cost: ${data.cost || "?"} GE Tokens
 💰 New Balance: ${data.new_balance} GE Tokens
 
-A staff member will process your reward soon if needed.`
+An admin will contact you as soon as possible to help you redeem your reward. Thank you for supporting the GamersEra community!`
           }
         ]
       });
@@ -504,11 +567,18 @@ A staff member will process your reward soon if needed.`
       console.log("Could not DM user purchase receipt.");
     }
 
-    // Admin purchase log
+    // Admin purchase log with Delivered button
     try {
       const logChannel = await client.channels.fetch(ADMIN_SHOP_LOG_CHANNEL_ID);
 
       if (logChannel) {
+        const deliveredRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`delivered_${interaction.user.id}_${itemId}`)
+            .setLabel("Delivered")
+            .setStyle(ButtonStyle.Success)
+        );
+
         await logChannel.send({
           embeds: [
             {
@@ -518,9 +588,12 @@ A staff member will process your reward soon if needed.`
 `👤 User: <@${interaction.user.id}>
 📦 Item: ${data.item_name || itemId}
 🪙 Cost: ${data.cost || "?"} GE Tokens
-💰 New Balance: ${data.new_balance} GE Tokens`
+💰 New Balance: ${data.new_balance} GE Tokens
+
+⏳ Status: Pending Delivery`
             }
-          ]
+          ],
+          components: [deliveredRow]
         });
       }
     } catch (err) {
