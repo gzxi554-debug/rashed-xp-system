@@ -33,29 +33,18 @@ const rankRoles = {
 
 async function syncRankRole(guild, userId, rank) {
   try {
-    console.log("SYNCING ROLE");
-    console.log("User ID:", userId);
-    console.log("Rank:", rank);
-
     const member = await guild.members.fetch(userId);
     const newRoleId = rankRoles[rank];
 
-    if (!newRoleId) {
-      console.log("No role found for rank:", rank);
-      return;
-    }
+    if (!newRoleId) return;
 
-    const allRankRoleIds = Object.values(rankRoles);
-
-    for (const roleId of allRankRoleIds) {
+    for (const roleId of Object.values(rankRoles)) {
       if (member.roles.cache.has(roleId) && roleId !== newRoleId) {
-        console.log("Removing role:", roleId);
         await member.roles.remove(roleId);
       }
     }
 
     if (!member.roles.cache.has(newRoleId)) {
-      console.log("Adding role:", newRoleId);
       await member.roles.add(newRoleId);
     }
 
@@ -68,11 +57,7 @@ async function syncRankRole(guild, userId, rank) {
 async function clearChannelMessages(channel) {
   try {
     const messages = await channel.messages.fetch({ limit: 100 });
-
-    if (messages.size > 0) {
-      await channel.bulkDelete(messages, true);
-      console.log(`🧹 Cleared ${messages.size} messages from ${channel.name}`);
-    }
+    if (messages.size > 0) await channel.bulkDelete(messages, true);
   } catch (err) {
     console.error("CLEAR CHANNEL ERROR:", err);
   }
@@ -82,30 +67,20 @@ function scheduleDailyShop() {
   const now = new Date();
   const target = new Date();
 
-  target.setHours(23, 0, 0, 0); // 11:00 PM server/Railway time
+  target.setHours(23, 0, 0, 0);
 
-  if (now > target) {
-    target.setDate(target.getDate() + 1);
-  }
+  if (now > target) target.setDate(target.getDate() + 1);
 
   const delay = target.getTime() - now.getTime();
 
-  console.log(`🕒 Daily shop scheduled in ${Math.floor(delay / 1000)} seconds`);
-
   setTimeout(() => {
     postDailyShop();
-
-    setInterval(() => {
-      postDailyShop();
-    }, 24 * 60 * 60 * 1000);
+    setInterval(postDailyShop, 24 * 60 * 60 * 1000);
   }, delay);
 }
 
 function buildUploadUrl(user) {
-  const discordId = encodeURIComponent(user.id);
-  const username = encodeURIComponent(user.username);
-
-  return `${UPLOAD_BASE_URL}/?discordId=${discordId}&username=${username}`;
+  return `${UPLOAD_BASE_URL}/?discordId=${encodeURIComponent(user.id)}&username=${encodeURIComponent(user.username)}`;
 }
 
 async function postSubmissionsOpen() {
@@ -116,7 +91,7 @@ async function postSubmissionsOpen() {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("submit_challenge")
-        .setLabel("Submit Challenge")
+        .setLabel("Submit Challenge now!")
         .setStyle(ButtonStyle.Primary)
     );
 
@@ -124,11 +99,23 @@ async function postSubmissionsOpen() {
       embeds: [
         {
           color: 0x00D1FF,
-          title: "📥 Submissions Are Open",
+          title: "📸 Daily Challenge Submissions Are Open",
           description:
-`Click **Submit Challenge** to open your secure GamersEra upload page.
+`Submit your proof for today's challenges below 👇
 
-Your Discord account will be linked automatically, so you only need to choose your game, challenge, and upload your clip.`
+━━━━━━━━━━━━━━
+
+✅ **Requirements**
+
+• Screenshot or clip proof
+• Must show gameplay
+• Use a different skin/team/car
+• Mention which challenge you completed
+• Fake submissions = XP denied
+
+━━━━━━━━━━━━━━
+
+🔥 Good luck grinders`
         }
       ],
       components: [row]
@@ -279,10 +266,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
     const gameMatch = content.match(/\[Game:\s*(.+?)\]/i);
     const challengeMatch = content.match(/\[Challenge:\s*(.+?)\]/i);
 
-    if (!gameMatch || !challengeMatch) {
-      console.log("STOPPED: missing [Game:] or [Challenge:]");
-      return;
-    }
+    if (!gameMatch || !challengeMatch) return;
 
     const submittedGame = gameMatch[1].trim();
     const submittedChallenge = challengeMatch[1].trim();
@@ -292,10 +276,7 @@ client.on("messageReactionAdd", async (reaction, user) => {
       clean(c.name) === clean(submittedChallenge)
     );
 
-    if (!challenge) {
-      console.log("STOPPED: challenge not found:", submittedGame, submittedChallenge);
-      return;
-    }
+    if (!challenge) return;
 
     const attachments = Array.from(reaction.message.attachments.values()).map(a => a.url);
 
@@ -315,31 +296,18 @@ client.on("messageReactionAdd", async (reaction, user) => {
       attachments
     };
 
-    console.log("Sending XP approval to n8n:", payload);
-
     const response = await fetch(N8N_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
 
-    console.log("n8n response status:", response.status);
-
-    if (!response.ok) {
-      console.error("n8n webhook failed:", response.status, await response.text());
-      return;
-    }
+    if (!response.ok) return;
 
     const data = await response.json();
-    console.log("n8n response data:", data);
-
     const rank = data.rank?.trim();
 
-    if (rank) {
-      await syncRankRole(reaction.message.guild, submitter.id, rank);
-    }
-
-    console.log(`✅ ${submitter.username} earned ${challenge.xp} XP for ${challenge.name}`);
+    if (rank) await syncRankRole(reaction.message.guild, submitter.id, rank);
   } catch (error) {
     console.error("Reaction approval error:", error);
   }
@@ -359,12 +327,8 @@ client.on("messageCreate", async (message) => {
 
     const response = await fetch(PROFILE_WEBHOOK_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        user_id: message.author.id
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: message.author.id })
     });
 
     if (!response.ok) {
@@ -409,18 +373,9 @@ async function postDailyShop() {
       body: JSON.stringify({ source: "discord_bot" })
     });
 
-    if (!response.ok) {
-      console.error("Daily shop webhook failed:", response.status, await response.text());
-      return;
-    }
+    if (!response.ok) return;
 
     const data = await response.json();
-
-    if (!Array.isArray(data.items) || data.items.length === 0) {
-      console.log("No shop items returned from n8n.");
-      return;
-    }
-
     const channel = await client.channels.fetch(SHOP_CHANNEL_ID);
     if (!channel) return;
 
@@ -440,14 +395,10 @@ async function postDailyShop() {
 
 ${item.description}`,
         color: item.category === "Featured Item" ? 0xFFD700 : 0x00D1FF,
-        footer: {
-          text: `Item ID: ${item.item_id}`
-        }
+        footer: { text: `Item ID: ${item.item_id}` }
       };
 
-      if (item.image_url) {
-        embed.image = { url: item.image_url };
-      }
+      if (item.image_url) embed.image = { url: item.image_url };
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -456,10 +407,7 @@ ${item.description}`,
           .setStyle(ButtonStyle.Primary)
       );
 
-      await channel.send({
-        embeds: [embed],
-        components: [row]
-      });
+      await channel.send({ embeds: [embed], components: [row] });
     }
   } catch (err) {
     console.error("SHOP ERROR:", err);
@@ -473,8 +421,16 @@ client.on("interactionCreate", async (interaction) => {
     if (interaction.customId === "submit_challenge") {
       const uploadUrl = buildUploadUrl(interaction.user);
 
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setLabel("Submit Challenge now!")
+          .setStyle(ButtonStyle.Link)
+          .setURL(uploadUrl)
+      );
+
       await interaction.reply({
-        content: `✅ Your secure upload page is ready:\n${uploadUrl}\n\nOnly you can see this message.`,
+        content: "✅ Your secure upload page is ready. Click the button below to submit your proof.",
+        components: [row],
         ephemeral: true
       });
 
@@ -536,10 +492,7 @@ Thank you for using the GE Token Shop!`
         console.log("Could not DM user delivery confirmation.");
       }
 
-      await interaction.editReply({
-        content: "✅ Purchase marked as delivered."
-      });
-
+      await interaction.editReply({ content: "✅ Purchase marked as delivered." });
       return;
     }
 
@@ -547,14 +500,11 @@ Thank you for using the GE Token Shop!`
 
     const itemId = interaction.customId.replace("buy_", "");
 
-    // Prevent Discord timeout while n8n processes the purchase
     await interaction.deferReply({ ephemeral: true });
 
     const response = await fetch(PURCHASE_WEBHOOK_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         user_id: interaction.user.id,
         username: interaction.user.username,
@@ -563,9 +513,6 @@ Thank you for using the GE Token Shop!`
     });
 
     const rawText = await response.text();
-
-    console.log("Purchase webhook status:", response.status);
-    console.log("Purchase webhook raw response:", rawText);
 
     if (!response.ok) {
       await interaction.editReply({
@@ -579,8 +526,6 @@ Thank you for using the GE Token Shop!`
     try {
       data = JSON.parse(rawText);
     } catch (err) {
-      console.error("Purchase webhook did not return JSON:", rawText);
-
       await interaction.editReply({
         content: "❌ Purchase system returned invalid JSON. Check n8n Respond to Webhook node."
       });
@@ -602,7 +547,6 @@ Thank you for using the GE Token Shop!`
 🪙 New Balance: ${data.new_balance} GE Tokens`
     });
 
-    // DM receipt to buyer
     try {
       await interaction.user.send({
         embeds: [
@@ -620,11 +564,8 @@ An admin will contact you as soon as possible to help you redeem your reward. Th
           }
         ]
       });
-    } catch (err) {
-      console.log("Could not DM user purchase receipt.");
-    }
+    } catch (err) {}
 
-    // Admin purchase log with Delivered button
     try {
       const logChannel = await client.channels.fetch(ADMIN_SHOP_LOG_CHANNEL_ID);
 
@@ -657,25 +598,16 @@ An admin will contact you as soon as possible to help you redeem your reward. Th
       console.error("ADMIN SHOP LOG ERROR:", err);
     }
   } catch (err) {
-    console.error("BUY BUTTON ERROR:", err);
+    console.error("BUTTON ERROR:", err);
 
     try {
       if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({
-          content: "❌ Purchase failed."
-        });
+        await interaction.editReply({ content: "❌ Action failed." });
       } else {
-        await interaction.reply({
-          content: "❌ Purchase failed.",
-          ephemeral: true
-        });
+        await interaction.reply({ content: "❌ Action failed.", ephemeral: true });
       }
-    } catch (e) {
-      console.error("FINAL INTERACTION ERROR:", e);
-    }
+    } catch (e) {}
   }
 });
 
 client.login(DISCORD_TOKEN);
-
-
