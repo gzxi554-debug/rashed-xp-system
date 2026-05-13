@@ -13,6 +13,7 @@ const N8N_PROFILE_WEBHOOK_URL = process.env.N8N_PROFILE_WEBHOOK_URL;
 
 const SUBMISSIONS_CHANNEL_ID = "1501823063694770206";
 const SHOP_CHANNEL_ID = "1501628913435152615";
+const ADMIN_SHOP_LOG_CHANNEL_ID = "1379446677647130805";
 const APPROVAL_EMOJI = "✅";
 
 const DAILY_SHOP_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/dailyshop";
@@ -480,6 +481,51 @@ client.on("interactionCreate", async (interaction) => {
 `✅ ${data.message || `Successfully purchased ${itemId}.`}
 🪙 New Balance: ${data.new_balance} GE Tokens`
     });
+
+    // DM receipt to buyer
+    try {
+      await interaction.user.send({
+        embeds: [
+          {
+            color: 0x00D1FF,
+            title: "🛒 Purchase Successful",
+            description:
+`Thank you for your purchase from the GE Token Shop!
+
+📦 Item: ${data.item_name || itemId}
+🪙 Cost: ${data.cost || "?"} GE Tokens
+💰 New Balance: ${data.new_balance} GE Tokens
+
+A staff member will process your reward soon if needed.`
+          }
+        ]
+      });
+    } catch (err) {
+      console.log("Could not DM user purchase receipt.");
+    }
+
+    // Admin purchase log
+    try {
+      const logChannel = await client.channels.fetch(ADMIN_SHOP_LOG_CHANNEL_ID);
+
+      if (logChannel) {
+        await logChannel.send({
+          embeds: [
+            {
+              color: 0xFFD700,
+              title: "🛒 New Shop Purchase",
+              description:
+`👤 User: <@${interaction.user.id}>
+📦 Item: ${data.item_name || itemId}
+🪙 Cost: ${data.cost || "?"} GE Tokens
+💰 New Balance: ${data.new_balance} GE Tokens`
+            }
+          ]
+        });
+      }
+    } catch (err) {
+      console.error("ADMIN SHOP LOG ERROR:", err);
+    }
   } catch (err) {
     console.error("BUY BUTTON ERROR:", err);
 
