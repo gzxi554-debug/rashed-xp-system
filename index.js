@@ -19,6 +19,7 @@ const APPROVAL_EMOJI = "✅";
 const DAILY_SHOP_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/dailyshop";
 const PURCHASE_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/shop";
 const PROFILE_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/profile";
+const UPLOAD_BASE_URL = "https://gamersera-upload.gzxi554.workers.dev";
 
 const rankRoles = {
   "Rookie": "1503078261150974092",
@@ -98,6 +99,45 @@ function scheduleDailyShop() {
       postDailyShop();
     }, 24 * 60 * 60 * 1000);
   }, delay);
+}
+
+function buildUploadUrl(user) {
+  const discordId = encodeURIComponent(user.id);
+  const username = encodeURIComponent(user.username);
+
+  return `${UPLOAD_BASE_URL}/?discordId=${discordId}&username=${username}`;
+}
+
+async function postSubmissionsOpen() {
+  try {
+    const channel = await client.channels.fetch(SUBMISSIONS_CHANNEL_ID);
+    if (!channel) return;
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("submit_challenge")
+        .setLabel("Submit Challenge")
+        .setStyle(ButtonStyle.Primary)
+    );
+
+    await channel.send({
+      embeds: [
+        {
+          color: 0x00D1FF,
+          title: "📥 Submissions Are Open",
+          description:
+`Click **Submit Challenge** to open your secure GamersEra upload page.
+
+Your Discord account will be linked automatically, so you only need to choose your game, challenge, and upload your clip.`
+        }
+      ],
+      components: [row]
+    });
+
+    console.log("✅ Submission open message posted.");
+  } catch (err) {
+    console.error("SUBMISSIONS OPEN POST ERROR:", err);
+  }
 }
 
 const challenges = [
@@ -309,6 +349,12 @@ client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
 
+    if (message.content.toLowerCase() === "/opensubmissions") {
+      await postSubmissionsOpen();
+      await message.reply("✅ Submission button posted.");
+      return;
+    }
+
     if (message.content.toLowerCase() !== "/geprofile") return;
 
     const response = await fetch(PROFILE_WEBHOOK_URL, {
@@ -423,6 +469,17 @@ ${item.description}`,
 client.on("interactionCreate", async (interaction) => {
   try {
     if (!interaction.isButton()) return;
+
+    if (interaction.customId === "submit_challenge") {
+      const uploadUrl = buildUploadUrl(interaction.user);
+
+      await interaction.reply({
+        content: `✅ Your secure upload page is ready:\n${uploadUrl}\n\nOnly you can see this message.`,
+        ephemeral: true
+      });
+
+      return;
+    }
 
     if (interaction.customId.startsWith("delivered_")) {
       const parts = interaction.customId.split("_");
@@ -620,4 +677,5 @@ An admin will contact you as soon as possible to help you redeem your reward. Th
 });
 
 client.login(DISCORD_TOKEN);
+
 
