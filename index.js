@@ -19,6 +19,7 @@ const APPROVAL_EMOJI = "✅";
 const DAILY_SHOP_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/dailyshop";
 const PURCHASE_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/shop";
 const PROFILE_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/profile";
+const CLIP_REVIEW_ACTION_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/clip-review-action";
 const UPLOAD_BASE_URL = "https://gamersera-upload.gzxi554.workers.dev";
 
 const rankRoles = {
@@ -69,13 +70,43 @@ function scheduleDailyShop() {
 
   target.setHours(23, 0, 0, 0);
 
-  if (now > target) target.setDate(target.getDate() + 1);
+  if (now >= target) {
+    target.setDate(target.getDate() + 1);
+  }
 
   const delay = target.getTime() - now.getTime();
 
+  console.log(`🛒 Daily shop scheduled in ${Math.floor(delay / 1000)} seconds`);
+
   setTimeout(() => {
     postDailyShop();
-    setInterval(postDailyShop, 24 * 60 * 60 * 1000);
+
+    setInterval(() => {
+      postDailyShop();
+    }, 24 * 60 * 60 * 1000);
+  }, delay);
+}
+
+function scheduleSubmissionsOpen() {
+  const now = new Date();
+  const target = new Date();
+
+  target.setHours(20, 0, 0, 0);
+
+  if (now >= target) {
+    target.setDate(target.getDate() + 1);
+  }
+
+  const delay = target.getTime() - now.getTime();
+
+  console.log(`📸 Submissions open scheduled in ${Math.floor(delay / 1000)} seconds`);
+
+  setTimeout(() => {
+    postSubmissionsOpen();
+
+    setInterval(() => {
+      postSubmissionsOpen();
+    }, 24 * 60 * 60 * 1000);
   }, delay);
 }
 
@@ -96,6 +127,7 @@ async function postSubmissionsOpen() {
     );
 
     await channel.send({
+      content: "Hey @everyone",
       embeds: [
         {
           color: 0x00D1FF,
@@ -118,7 +150,10 @@ async function postSubmissionsOpen() {
 🔥 Good luck grinders`
         }
       ],
-      components: [row]
+      components: [row],
+      allowedMentions: {
+        parse: ["everyone"]
+      }
     });
 
     console.log("✅ Submission open message posted.");
@@ -240,9 +275,10 @@ const client = new Client({
 
 client.once("ready", () => {
   console.log(`✅ XP Reaction Bot is online as ${client.user.tag}`);
+  console.log(`🌍 Current server timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
 
-  postDailyShop();
   scheduleDailyShop();
+  scheduleSubmissionsOpen();
 });
 
 client.on("messageReactionAdd", async (reaction, user) => {
@@ -414,9 +450,99 @@ ${item.description}`,
   }
 }
 
+async function handleClipReview(interaction, action) {
+  const prefix = action === "approve" ? "approve_clip_" : "reject_clip_";
+  const fileName = interaction.customId.replace(prefix, "");
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const response = await fetch(CLIP_REVIEW_ACTION_WEBHOOK_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      action,
+      fileName,
+      admin_id: interaction.user.id,
+      admin_username: interaction.user.username
+    })
+  });
+
+  const rawText = await response.text();
+
+  if (!response.ok) {
+    console.error("CLIP REVIEW WEBHOOK ERROR:", response.status, rawText);
+
+    await interaction.editReply({
+      content: "❌ Review action failed. Check n8n clip-review-action workflow."
+    });
+
+    return;
+  }
+
+  let data = {};
+
+  try {
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch (err) {
+    data = {};
+  }
+
+  const oldEmbed = interaction.message.embeds[0];
+  const oldDescription = oldEmbed?.description || "";
+
+  const statusText =
+    action === "approve"
+      ? `✅ Status: Approved\n👮 Reviewed By: <@${interaction.user.id}>`
+      : `❌ Status: Rejected\n👮 Reviewed By: <@${interaction.user.id}>`;
+
+  const newColor = action === "approve" ? 0x2ECC71 : 0xE74C3C;
+  const newTitle = action === "approve" ? "✅ Clip Submission Approved" : "❌ Clip Submission Rejected";
+
+  const newDescription =
+`${oldDescription}
+
+━━━━━━━━━━━━━━
+${statusText}`;
+
+  const disabledRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`review_done_${fileName}`)
+      .setLabel(action === "approve" ? "Approved" : "Rejected")
+      .setStyle(action === "approve" ? ButtonStyle.Success : ButtonStyle.Danger)
+      .setDisabled(true)
+  );
+
+  await interaction.message.edit({
+    embeds: [
+      {
+        color: newColor,
+        title: newTitle,
+        description: newDescription
+      }
+    ],
+    components: [disabledRow]
+  });
+
+  await interaction.editReply({
+    content: data.message || `✅ Submission ${action === "approve" ? "approved" : "rejected"} successfully.`
+  });
+}
+
 client.on("interactionCreate", async (interaction) => {
   try {
     if (!interaction.isButton()) return;
+
+    if (interaction.customId.startsWith("approve_clip_")) {
+      await handleClipReview(interaction, "approve");
+      return;
+    }
+
+    if (interaction.customId.startsWith("reject_clip_")) {
+      await handleClipReview(interaction, "reject");
+      return;
+    }
 
     if (interaction.customId === "submit_challenge") {
       const uploadUrl = buildUploadUrl(interaction.user);
