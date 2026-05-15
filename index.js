@@ -1,3 +1,5 @@
+const express = require("express");
+
 const {
   Client,
   GatewayIntentBits,
@@ -31,6 +33,96 @@ const rankRoles = {
   "Champion": "1503080883039506645",
   "GE Legend": "1503080595675283621"
 };
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.MessageContent
+  ],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
+});
+
+const app = express();
+app.use(express.json({ limit: "2mb" }));
+
+app.get("/", (req, res) => {
+  res.status(200).send("GamersEra bot is online.");
+});
+
+app.post("/new-submission", async (req, res) => {
+  try {
+    const body = req.body || {};
+
+    const rowNumber = String(body.row_number || body.rowNumber || body.submission_id || "").trim();
+    const username = String(body.username || "Unknown").trim();
+    const discordId = String(body.discordId || body.discord_id || "").trim();
+    const game = String(body.game || "Unknown").trim();
+    const challenge = String(body.challenge || "Unknown").trim();
+    const fileName = String(body.fileName || body.file_name || "Unknown").trim();
+    const reviewUrl = String(body.reviewUrl || body.review_url || "").trim();
+    const uploadedAt = String(body.uploadedAt || body.uploaded_at || new Date().toISOString()).trim();
+
+    if (!rowNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing row_number."
+      });
+    }
+
+    const channel = await client.channels.fetch(SUBMISSIONS_CHANNEL_ID);
+
+    if (!channel) {
+      return res.status(500).json({
+        success: false,
+        message: "Submissions channel not found."
+      });
+    }
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`approve_clip_${rowNumber}`)
+        .setLabel("Approve")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`reject_clip_${rowNumber}`)
+        .setLabel("Reject")
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await channel.send({
+      embeds: [
+        {
+          title: "📥 New Clip Submission",
+          color: 3447003,
+          description:
+`👤 User: ${discordId ? `<@${discordId}>` : username}
+🎮 Game: ${game}
+📌 Challenge: ${challenge}
+📁 File: ${fileName}
+🎥 Review Clip: ${reviewUrl}
+🕒 Uploaded: ${uploadedAt}
+
+🆔 Submission Row: ${rowNumber}`
+        }
+      ],
+      components: [row]
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Submission sent to Discord with buttons."
+    });
+  } catch (err) {
+    console.error("NEW SUBMISSION ENDPOINT ERROR:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to send submission to Discord."
+    });
+  }
+});
 
 async function syncRankRole(guild, userId, rank) {
   try {
@@ -162,21 +254,9 @@ async function postSubmissionsOpen() {
   }
 }
 
-const challenges = [];
-
 function clean(text) {
   return String(text || "").toLowerCase().trim().replace(/\s+/g, " ");
 }
-
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.MessageContent
-  ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
-});
 
 client.once("ready", () => {
   console.log(`✅ XP Reaction Bot is online as ${client.user.tag}`);
@@ -297,7 +377,7 @@ ${item.description}`,
 
 async function handleClipReview(interaction, action) {
   const prefix = action === "approve" ? "approve_clip_" : "reject_clip_";
-  const fileName = interaction.customId.replace(prefix, "");
+  const submissionRowNumber = interaction.customId.replace(prefix, "");
 
   await interaction.deferReply({ ephemeral: true });
 
@@ -308,7 +388,8 @@ async function handleClipReview(interaction, action) {
     },
     body: JSON.stringify({
       action,
-      fileName,
+      row_number: submissionRowNumber,
+      submission_row_number: submissionRowNumber,
       admin_id: interaction.user.id,
       admin_username: interaction.user.username,
       message_id: interaction.message.id,
@@ -374,7 +455,7 @@ ${statusText}`;
 
   const disabledRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`review_done_${fileName}`)
+      .setCustomId(`review_done_${submissionRowNumber}`)
       .setLabel(action === "approve" ? "Approved" : "Rejected")
       .setStyle(action === "approve" ? ButtonStyle.Success : ButtonStyle.Danger)
       .setDisabled(true)
@@ -625,6 +706,12 @@ An admin will contact you as soon as possible to help you redeem your reward. Th
       }
     } catch (e) {}
   }
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`🌐 Bot HTTP server listening on port ${PORT}`);
 });
 
 client.login(DISCORD_TOKEN);
