@@ -14,6 +14,7 @@ const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
 const N8N_PROFILE_WEBHOOK_URL = process.env.N8N_PROFILE_WEBHOOK_URL;
 
 const SUBMISSIONS_CHANNEL_ID = "1501823063694770206";
+const MOD_SUBMISSIONS_CHANNEL_ID = "1379446543949500517";
 const SHOP_CHANNEL_ID = "1501628913435152615";
 const ADMIN_SHOP_LOG_CHANNEL_ID = "1379446677647130805";
 const APPROVAL_EMOJI = "✅";
@@ -23,6 +24,8 @@ const PURCHASE_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/shop";
 const PROFILE_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/profile";
 const CLIP_REVIEW_ACTION_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/clip-review-action";
 const UPLOAD_BASE_URL = "https://gamersera-upload.gzxi554.workers.dev";
+
+const reviewStore = new Map();
 
 const rankRoles = {
   "Rookie": "1503078261150974092",
@@ -71,22 +74,25 @@ app.post("/new-submission", async (req, res) => {
       });
     }
 
-    const channel = await client.channels.fetch(SUBMISSIONS_CHANNEL_ID);
+    const reviewId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    reviewStore.set(reviewId, rowNumber);
+
+    const channel = await client.channels.fetch(MOD_SUBMISSIONS_CHANNEL_ID);
 
     if (!channel) {
       return res.status(500).json({
         success: false,
-        message: "Submissions channel not found."
+        message: "Moderator submissions channel not found."
       });
     }
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(`approve_clip_${rowNumber}`)
+        .setCustomId(`approve_clip_${reviewId}`)
         .setLabel("Approve")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
-        .setCustomId(`reject_clip_${rowNumber}`)
+        .setCustomId(`reject_clip_${reviewId}`)
         .setLabel("Reject")
         .setStyle(ButtonStyle.Danger)
     );
@@ -104,7 +110,7 @@ app.post("/new-submission", async (req, res) => {
 🎥 Review Clip: ${reviewUrl}
 🕒 Uploaded: ${uploadedAt}
 
-🆔 Submission Row: ${rowNumber}`
+🆔 Submission ID: ${rowNumber}`
         }
       ],
       components: [row]
@@ -112,7 +118,7 @@ app.post("/new-submission", async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Submission sent to Discord with buttons."
+      message: "Submission sent to moderator channel with buttons."
     });
   } catch (err) {
     console.error("NEW SUBMISSION ENDPOINT ERROR:", err);
@@ -254,24 +260,12 @@ async function postSubmissionsOpen() {
   }
 }
 
-function clean(text) {
-  return String(text || "").toLowerCase().trim().replace(/\s+/g, " ");
-}
-
 client.once("ready", () => {
   console.log(`✅ XP Reaction Bot is online as ${client.user.tag}`);
   console.log(`🌍 Current server timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
 
   scheduleDailyShop();
   scheduleSubmissionsOpen();
-});
-
-client.on("messageReactionAdd", async (reaction, user) => {
-  try {
-    if (user.bot) return;
-  } catch (error) {
-    console.error("Reaction approval error:", error);
-  }
 });
 
 client.on("messageCreate", async (message) => {
@@ -377,7 +371,8 @@ ${item.description}`,
 
 async function handleClipReview(interaction, action) {
   const prefix = action === "approve" ? "approve_clip_" : "reject_clip_";
-  const submissionRowNumber = interaction.customId.replace(prefix, "");
+  const reviewId = interaction.customId.replace(prefix, "");
+  const submissionRowNumber = reviewStore.get(reviewId) || reviewId;
 
   await interaction.deferReply({ ephemeral: true });
 
@@ -455,7 +450,7 @@ ${statusText}`;
 
   const disabledRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`review_done_${submissionRowNumber}`)
+      .setCustomId(`review_done_${reviewId}`)
       .setLabel(action === "approve" ? "Approved" : "Rejected")
       .setStyle(action === "approve" ? ButtonStyle.Success : ButtonStyle.Danger)
       .setDisabled(true)
@@ -471,6 +466,8 @@ ${statusText}`;
     ],
     components: [disabledRow]
   });
+
+  reviewStore.delete(reviewId);
 
   if (playerId) {
     try {
