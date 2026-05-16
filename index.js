@@ -10,14 +10,12 @@ const {
 } = require("discord.js");
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL;
-const N8N_PROFILE_WEBHOOK_URL = process.env.N8N_PROFILE_WEBHOOK_URL;
 
 const SUBMISSIONS_CHANNEL_ID = "1501823063694770206";
 const MOD_SUBMISSIONS_CHANNEL_ID = "1379446543949500517";
 const SHOP_CHANNEL_ID = "1501628913435152615";
 const ADMIN_SHOP_LOG_CHANNEL_ID = "1379446677647130805";
-const APPROVAL_EMOJI = "✅";
+const XP_LOG_CHANNEL_ID = "1501625701198205009";
 
 const DAILY_SHOP_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/dailyshop";
 const PURCHASE_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/shop";
@@ -68,10 +66,7 @@ app.post("/new-submission", async (req, res) => {
     const uploadedAt = String(body.uploadedAt || body.uploaded_at || new Date().toISOString()).trim();
 
     if (!rowNumber) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing row_number."
-      });
+      return res.status(400).json({ success: false, message: "Missing row_number." });
     }
 
     const reviewId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -80,10 +75,7 @@ app.post("/new-submission", async (req, res) => {
     const channel = await client.channels.fetch(MOD_SUBMISSIONS_CHANNEL_ID);
 
     if (!channel) {
-      return res.status(500).json({
-        success: false,
-        message: "Moderator submissions channel not found."
-      });
+      return res.status(500).json({ success: false, message: "Moderator submissions channel not found." });
     }
 
     const row = new ActionRowBuilder().addComponents(
@@ -122,11 +114,7 @@ app.post("/new-submission", async (req, res) => {
     });
   } catch (err) {
     console.error("NEW SUBMISSION ENDPOINT ERROR:", err);
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to send submission to Discord."
-    });
+    return res.status(500).json({ success: false, message: "Failed to send submission to Discord." });
   }
 });
 
@@ -168,9 +156,7 @@ function scheduleDailyShop() {
 
   target.setHours(23, 0, 0, 0);
 
-  if (now >= target) {
-    target.setDate(target.getDate() + 1);
-  }
+  if (now >= target) target.setDate(target.getDate() + 1);
 
   const delay = target.getTime() - now.getTime();
 
@@ -178,10 +164,7 @@ function scheduleDailyShop() {
 
   setTimeout(() => {
     postDailyShop();
-
-    setInterval(() => {
-      postDailyShop();
-    }, 24 * 60 * 60 * 1000);
+    setInterval(() => postDailyShop(), 24 * 60 * 60 * 1000);
   }, delay);
 }
 
@@ -191,9 +174,7 @@ function scheduleSubmissionsOpen() {
 
   target.setHours(20, 0, 0, 0);
 
-  if (now >= target) {
-    target.setDate(target.getDate() + 1);
-  }
+  if (now >= target) target.setDate(target.getDate() + 1);
 
   const delay = target.getTime() - now.getTime();
 
@@ -201,10 +182,7 @@ function scheduleSubmissionsOpen() {
 
   setTimeout(() => {
     postSubmissionsOpen();
-
-    setInterval(() => {
-      postSubmissionsOpen();
-    }, 24 * 60 * 60 * 1000);
+    setInterval(() => postSubmissionsOpen(), 24 * 60 * 60 * 1000);
   }, delay);
 }
 
@@ -249,9 +227,7 @@ async function postSubmissionsOpen() {
         }
       ],
       components: [row],
-      allowedMentions: {
-        parse: ["everyone"]
-      }
+      allowedMentions: { parse: ["everyone"] }
     });
 
     console.log("✅ Submission open message posted.");
@@ -369,6 +345,34 @@ ${item.description}`,
   }
 }
 
+async function sendXpAwardLog(playerId, data) {
+  try {
+    const xpChannel = await client.channels.fetch(XP_LOG_CHANNEL_ID);
+    if (!xpChannel) return;
+
+    await xpChannel.send({
+      embeds: [
+        {
+          color: 0x2ECC71,
+          title: "✅ Challenge Approved",
+          description:
+`👤 User: <@${playerId}>
+
+${data.xp || "⚡ XP updated"}
+${data.tokens || "🪙 GE Tokens updated"}
+${data.rank || "🏅 Rank updated"}
+${data.level || "🎖️ Level updated"}
+${data.challengesCompleted || "✅ Challenges Completed updated"}
+
+🎮 Approved By: The Challenge Review Team`
+        }
+      ]
+    });
+  } catch (err) {
+    console.error("XP LOG CHANNEL ERROR:", err);
+  }
+}
+
 async function handleClipReview(interaction, action) {
   const prefix = action === "approve" ? "approve_clip_" : "reject_clip_";
   const reviewId = interaction.customId.replace(prefix, "");
@@ -378,9 +382,7 @@ async function handleClipReview(interaction, action) {
 
   const response = await fetch(CLIP_REVIEW_ACTION_WEBHOOK_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       action,
       row_number: submissionRowNumber,
@@ -397,11 +399,9 @@ async function handleClipReview(interaction, action) {
 
   if (!response.ok) {
     console.error("CLIP REVIEW WEBHOOK ERROR:", response.status, rawText);
-
     await interaction.editReply({
       content: "❌ Review action failed. Check n8n clip-review-action workflow."
     });
-
     return;
   }
 
@@ -423,7 +423,7 @@ async function handleClipReview(interaction, action) {
   const rank = data.rank || data.new_rank;
 
   if (action === "approve" && playerId && rank && interaction.guild) {
-    await syncRankRole(interaction.guild, playerId, String(rank).trim());
+    await syncRankRole(interaction.guild, playerId, String(rank).replace("🏅", "").trim());
   }
 
   const oldEmbed = interaction.message.embeds[0];
@@ -435,8 +435,8 @@ async function handleClipReview(interaction, action) {
 
   const statusText =
     action === "approve"
-      ? `✅ Status: Approved\n👮 Reviewed By: <@${interaction.user.id}>`
-      : `❌ Status: Rejected\n👮 Reviewed By: <@${interaction.user.id}>`;
+      ? `✅ Status: Approved\n👮 Reviewed By: The Challenge Review Team`
+      : `❌ Status: Rejected\n👮 Reviewed By: The Challenge Review Team`;
 
   const newColor = action === "approve" ? 0x2ECC71 : 0xE74C3C;
   const newTitle = action === "approve" ? "✅ Clip Submission Approved" : "❌ Clip Submission Rejected";
@@ -482,7 +482,11 @@ ${statusText}`;
 action === "approve"
   ? `Your challenge submission has been approved.
 
-⚡ XP and GE Tokens have been added to your profile.`
+${data.xp || "⚡ XP updated"}
+${data.tokens || "🪙 GE Tokens updated"}
+${data.rank || "🏅 Rank updated"}
+${data.level || "🎖️ Level updated"}
+${data.challengesCompleted || "✅ Challenges Completed updated"}`
   : `Your challenge submission has been rejected.
 
 Please make sure your proof follows the challenge requirements before submitting again.`
@@ -492,6 +496,10 @@ Please make sure your proof follows the challenge requirements before submitting
     } catch (err) {
       console.log("Could not DM player review result.");
     }
+  }
+
+  if (action === "approve" && playerId) {
+    await sendXpAwardLog(playerId, data);
   }
 
   await interaction.editReply({
