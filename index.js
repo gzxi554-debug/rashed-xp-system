@@ -32,27 +32,21 @@ const rankRoles = {
   "Rookie III": "1505511396635443380",
   "Rookie II": "1501478561725415534",
   "Rookie I": "1503078261150974092",
-
   "Grinder III": "1505511549752840292",
   "Grinder II": "1505511601170812949",
   "Grinder I": "1503078939864862932",
-
   "Contender III": "1505511663334461550",
   "Contender II": "1505511733349974187",
   "Contender I": "1503079208124027100",
-
   "Vanguard III": "1505511854980464783",
   "Vanguard II": "1505511790795296778",
   "Vanguard I": "1503079523867168788",
-
   "Ascendant III": "1505511919904358481",
   "Ascendant II": "1505511959724818533",
   "Ascendant I": "1503079798489092136",
-
   "Champion III": "1505512016616362066",
   "Champion II": "1505512067573088446",
   "Champion I": "1503080883039506645",
-
   "GE Legend": "1503080595675283621"
 };
 
@@ -101,21 +95,56 @@ async function clearDailyChallengesChannel() {
   }
 }
 
-function scheduleDailyChallengeClear() {
+async function postSubmissionsClosedMessage() {
+  try {
+    const channel = await client.channels.fetch(SUBMISSIONS_CHANNEL_ID);
+    if (!channel) return;
+
+    await clearChannelMessages(channel);
+
+    await channel.send({
+      embeds: [
+        {
+          color: 0xE74C3C,
+          title: "🔒 Daily Challenge Submissions Are Closed",
+          description:
+`Submissions for today's challenges are now closed.
+
+━━━━━━━━━━━━━━
+
+📸 New submissions will reopen at **8:00 PM** after the next daily challenges are released.
+
+🔥 Stay ready grinders.`
+        }
+      ]
+    });
+
+    console.log("🔒 Submissions closed message posted.");
+  } catch (err) {
+    console.error("SUBMISSIONS CLOSED MESSAGE ERROR:", err);
+  }
+}
+
+async function dailyFivePmReset() {
+  await clearDailyChallengesChannel();
+  await postSubmissionsClosedMessage();
+}
+
+function scheduleDailyFivePmReset() {
   const now = new Date();
   const target = new Date();
 
-  target.setHours(18, 0, 0, 0);
+  target.setHours(17, 0, 0, 0);
 
   if (now >= target) target.setDate(target.getDate() + 1);
 
   const delay = target.getTime() - now.getTime();
 
-  console.log(`🧹 Daily challenge clear scheduled in ${Math.floor(delay / 1000)} seconds`);
+  console.log(`🧹 5 PM daily reset scheduled in ${Math.floor(delay / 1000)} seconds`);
 
   setTimeout(() => {
-    clearDailyChallengesChannel();
-    setInterval(() => clearDailyChallengesChannel(), 24 * 60 * 60 * 1000);
+    dailyFivePmReset();
+    setInterval(() => dailyFivePmReset(), 24 * 60 * 60 * 1000);
   }, delay);
 }
 
@@ -175,18 +204,24 @@ app.post("/todays-submitters", async (req, res) => {
 app.post("/daily-challenges", async (req, res) => {
   try {
     const body = req.body || {};
-    const channel = await client.channels.fetch(DAILY_CHALLENGES_CHANNEL_ID);
 
-    if (!channel) {
+    const dailyChannel = await client.channels.fetch(DAILY_CHALLENGES_CHANNEL_ID);
+    const submissionsChannel = await client.channels.fetch(SUBMISSIONS_CHANNEL_ID);
+
+    if (!dailyChannel) {
       return res.status(500).json({
         success: false,
         message: "Daily challenges channel not found."
       });
     }
 
-    await clearChannelMessages(channel);
+    await clearChannelMessages(dailyChannel);
 
-    await channel.send({
+    if (submissionsChannel) {
+      await clearChannelMessages(submissionsChannel);
+    }
+
+    await dailyChannel.send({
       content: body.content || "@everyone",
       embeds: body.embeds || [
         {
@@ -200,7 +235,7 @@ app.post("/daily-challenges", async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Daily challenges posted and old messages cleared."
+      message: "Daily challenges posted and submissions closed message cleared."
     });
   } catch (err) {
     console.error("DAILY CHALLENGES POST ERROR:", err);
@@ -399,7 +434,7 @@ client.once("ready", () => {
 
   scheduleDailyShop();
   scheduleSubmissionsOpen();
-  scheduleDailyChallengeClear();
+  scheduleDailyFivePmReset();
 });
 
 client.on("messageCreate", async (message) => {
@@ -409,6 +444,12 @@ client.on("messageCreate", async (message) => {
     if (message.content.toLowerCase() === "/opensubmissions") {
       await postSubmissionsOpen();
       await message.reply("✅ Submission button posted.");
+      return;
+    }
+
+    if (message.content.toLowerCase() === "/closesubmissions") {
+      await postSubmissionsClosedMessage();
+      await message.reply("🔒 Submissions closed message posted.");
       return;
     }
 
