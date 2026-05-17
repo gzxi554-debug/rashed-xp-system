@@ -16,6 +16,7 @@ const MOD_SUBMISSIONS_CHANNEL_ID = "1379446543949500517";
 const SHOP_CHANNEL_ID = "1501628913435152615";
 const ADMIN_SHOP_LOG_CHANNEL_ID = "1379446677647130805";
 const XP_LOG_CHANNEL_ID = "1501625701198205009";
+const LEADERBOARD_CHANNEL_ID = "1501628622769754243";
 const DAILY_CHALLENGES_CHANNEL_ID = process.env.DAILY_CHALLENGES_CHANNEL_ID || "1501618403406905415";
 
 const DAILY_SHOP_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/dailyshop";
@@ -69,7 +70,6 @@ async function clearDailyChallengesChannel() {
     if (!channel) return;
 
     await clearChannelMessages(channel);
-
     console.log("🧹 Daily challenges channel cleared.");
   } catch (err) {
     console.error("DAILY CHALLENGE CLEAR ERROR:", err);
@@ -98,6 +98,63 @@ function scheduleDailyChallengeClear() {
     }, 24 * 60 * 60 * 1000);
   }, delay);
 }
+
+app.post("/todays-submitters", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const submitters = Array.isArray(body.submitters) ? body.submitters : [];
+    const date = body.date || new Date().toISOString().split("T")[0];
+
+    const channel = await client.channels.fetch(LEADERBOARD_CHANNEL_ID);
+
+    if (!channel) {
+      return res.status(500).json({
+        success: false,
+        message: "Leaderboard channel not found."
+      });
+    }
+
+    const description = submitters.length
+      ? submitters
+          .map((user, index) => {
+            const discordId = user.discordId || user.discord_id || user["Discord ID"];
+            const username = user.username || user.Username || "Unknown";
+            const count = Number(user.count || user.submissions || 0);
+
+            return `**${index + 1}.** ${discordId ? `<@${discordId}>` : username} — ✅ ${count} approved challenge${count === 1 ? "" : "s"}`;
+          })
+          .join("\n")
+      : "No approved challenge submitters today.";
+
+    await channel.send({
+      embeds: [
+        {
+          color: 0x00D1FF,
+          title: "🏆 Today's Approved Challenge Submitters",
+          description,
+          footer: {
+            text: `Date: ${date}`
+          }
+        }
+      ],
+      allowedMentions: {
+        parse: []
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Today's submitters posted to leaderboard channel."
+    });
+  } catch (err) {
+    console.error("TODAYS SUBMITTERS ERROR:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to post today's submitters."
+    });
+  }
+});
 
 app.post("/daily-challenges", async (req, res) => {
   try {
