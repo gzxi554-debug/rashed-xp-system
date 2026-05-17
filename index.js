@@ -16,6 +16,7 @@ const MOD_SUBMISSIONS_CHANNEL_ID = "1379446543949500517";
 const SHOP_CHANNEL_ID = "1501628913435152615";
 const ADMIN_SHOP_LOG_CHANNEL_ID = "1379446677647130805";
 const XP_LOG_CHANNEL_ID = "1501625701198205009";
+const DAILY_CHALLENGES_CHANNEL_ID = process.env.DAILY_CHALLENGES_CHANNEL_ID || "1501618403406905415";
 
 const DAILY_SHOP_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/dailyshop";
 const PURCHASE_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/shop";
@@ -23,6 +24,7 @@ const PROFILE_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/profile";
 const CLIP_REVIEW_ACTION_WEBHOOK_URL = "https://gamersera.app.n8n.cloud/webhook/clip-review-action";
 const UPLOAD_BASE_URL = "https://gamersera-upload.gzxi554.workers.dev";
 
+const APPROVAL_DELAY_MS = 6 * 60 * 1000;
 const reviewStore = new Map();
 
 const rankRoles = {
@@ -50,6 +52,57 @@ app.use(express.json({ limit: "2mb" }));
 
 app.get("/", (req, res) => {
   res.status(200).send("GamersEra bot is online.");
+});
+
+async function clearChannelMessages(channel) {
+  try {
+    const messages = await channel.messages.fetch({ limit: 100 });
+    if (messages.size > 0) await channel.bulkDelete(messages, true);
+  } catch (err) {
+    console.error("CLEAR CHANNEL ERROR:", err);
+  }
+}
+
+app.post("/daily-challenges", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const channel = await client.channels.fetch(DAILY_CHALLENGES_CHANNEL_ID);
+
+    if (!channel) {
+      return res.status(500).json({
+        success: false,
+        message: "Daily challenges channel not found."
+      });
+    }
+
+    await clearChannelMessages(channel);
+
+    await channel.send({
+      content: body.content || "@everyone",
+      embeds: body.embeds || [
+        {
+          color: 0x00D1FF,
+          title: body.title || "🔥 Daily Challenges Are Live",
+          description: body.description || "Daily challenges are now live."
+        }
+      ],
+      allowedMentions: {
+        parse: ["everyone"]
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Daily challenges posted and old messages cleared."
+    });
+  } catch (err) {
+    console.error("DAILY CHALLENGES POST ERROR:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to post daily challenges."
+    });
+  }
 });
 
 app.post("/new-submission", async (req, res) => {
@@ -141,15 +194,6 @@ async function syncRankRole(guild, userId, rank) {
   }
 }
 
-async function clearChannelMessages(channel) {
-  try {
-    const messages = await channel.messages.fetch({ limit: 100 });
-    if (messages.size > 0) await channel.bulkDelete(messages, true);
-  } catch (err) {
-    console.error("CLEAR CHANNEL ERROR:", err);
-  }
-}
-
 function scheduleDailyShop() {
   const now = new Date();
   const target = new Date();
@@ -194,6 +238,8 @@ async function postSubmissionsOpen() {
   try {
     const channel = await client.channels.fetch(SUBMISSIONS_CHANNEL_ID);
     if (!channel) return;
+
+    await clearChannelMessages(channel);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -373,6 +419,52 @@ ${data.challengesCompleted || "✅ Challenges Completed updated"}
   }
 }
 
+async function sendApprovalDm(playerId, data, newColor) {
+  try {
+    const player = await client.users.fetch(playerId);
+
+    await player.send({
+      embeds: [
+        {
+          color: newColor,
+          title: "✅ Challenge Approved",
+          description:
+`Your challenge submission has been approved.
+
+${data.xp || "⚡ XP updated"}
+${data.tokens || "🪙 GE Tokens updated"}
+${data.rank || "🏅 Rank updated"}
+${data.level || "🎖️ Level updated"}
+${data.challengesCompleted || "✅ Challenges Completed updated"}`
+        }
+      ]
+    });
+  } catch (err) {
+    console.log("Could not DM player approval result.");
+  }
+}
+
+async function sendRejectionDm(playerId, newColor) {
+  try {
+    const player = await client.users.fetch(playerId);
+
+    await player.send({
+      embeds: [
+        {
+          color: newColor,
+          title: "❌ Challenge Rejected",
+          description:
+`Your challenge submission has been rejected.
+
+Please make sure your proof follows the challenge requirements before submitting again.`
+        }
+      ]
+    });
+  } catch (err) {
+    console.log("Could not DM player rejection result.");
+  }
+}
+
 async function handleClipReview(interaction, action) {
   const prefix = action === "approve" ? "approve_clip_" : "reject_clip_";
   const reviewId = interaction.customId.replace(prefix, "");
@@ -470,36 +562,14 @@ ${statusText}`;
   reviewStore.delete(reviewId);
 
   if (playerId) {
-    try {
-      const player = await client.users.fetch(playerId);
-
-      await player.send({
-        embeds: [
-          {
-            color: newColor,
-            title: action === "approve" ? "✅ Challenge Approved" : "❌ Challenge Rejected",
-            description:
-action === "approve"
-  ? `Your challenge submission has been approved.
-
-${data.xp || "⚡ XP updated"}
-${data.tokens || "🪙 GE Tokens updated"}
-${data.rank || "🏅 Rank updated"}
-${data.level || "🎖️ Level updated"}
-${data.challengesCompleted || "✅ Challenges Completed updated"}`
-  : `Your challenge submission has been rejected.
-
-Please make sure your proof follows the challenge requirements before submitting again.`
-          }
-        ]
-      });
-    } catch (err) {
-      console.log("Could not DM player review result.");
+    if (action === "approve") {
+      setTimeout(async () => {
+        await sendApprovalDm(playerId, data, newColor);
+        await sendXpAwardLog(playerId, data);
+      }, APPROVAL_DELAY_MS);
+    } else {
+      await sendRejectionDm(playerId, newColor);
     }
-  }
-
-  if (action === "approve" && playerId) {
-    await sendXpAwardLog(playerId, data);
   }
 
   await interaction.editReply({
