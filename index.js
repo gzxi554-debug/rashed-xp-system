@@ -29,12 +29,30 @@ const APPROVAL_DELAY_MS = 6 * 60 * 1000;
 const reviewStore = new Map();
 
 const rankRoles = {
-  "Rookie": "1503078261150974092",
-  "Grinder": "1503078939864862932",
-  "Contender": "1503079208124027100",
-  "Vanguard": "1503079523867168788",
-  "Ascendant": "1503079798489092136",
-  "Champion": "1503080883039506645",
+  "Rookie III": "1505511396635443380",
+  "Rookie II": "1501478561725415534",
+  "Rookie I": "1503078261150974092",
+
+  "Grinder III": "1505511549752840292",
+  "Grinder II": "1505511601170812949",
+  "Grinder I": "1503078939864862932",
+
+  "Contender III": "1505511663334461550",
+  "Contender II": "1505511733349974187",
+  "Contender I": "1503079208124027100",
+
+  "Vanguard III": "1505511854980464783",
+  "Vanguard II": "1505511790795296778",
+  "Vanguard I": "1503079523867168788",
+
+  "Ascendant III": "1505511919904358481",
+  "Ascendant II": "1505511959724818533",
+  "Ascendant I": "1503079798489092136",
+
+  "Champion III": "1505512016616362066",
+  "Champion II": "1505512067573088446",
+  "Champion I": "1503080883039506645",
+
   "GE Legend": "1503080595675283621"
 };
 
@@ -54,6 +72,13 @@ app.use(express.json({ limit: "2mb" }));
 app.get("/", (req, res) => {
   res.status(200).send("GamersEra bot is online.");
 });
+
+function normalizeRank(rank) {
+  return String(rank || "")
+    .replace(/[⚪🟤⚙️⭐💎👑🔥🏅]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 async function clearChannelMessages(channel) {
   try {
@@ -82,9 +107,7 @@ function scheduleDailyChallengeClear() {
 
   target.setHours(18, 0, 0, 0);
 
-  if (now >= target) {
-    target.setDate(target.getDate() + 1);
-  }
+  if (now >= target) target.setDate(target.getDate() + 1);
 
   const delay = target.getTime() - now.getTime();
 
@@ -92,10 +115,7 @@ function scheduleDailyChallengeClear() {
 
   setTimeout(() => {
     clearDailyChallengesChannel();
-
-    setInterval(() => {
-      clearDailyChallengesChannel();
-    }, 24 * 60 * 60 * 1000);
+    setInterval(() => clearDailyChallengesChannel(), 24 * 60 * 60 * 1000);
   }, delay);
 }
 
@@ -132,14 +152,10 @@ app.post("/todays-submitters", async (req, res) => {
           color: 0x00D1FF,
           title: "🏆 Today's Approved Challenge Submitters",
           description,
-          footer: {
-            text: `Date: ${date}`
-          }
+          footer: { text: `Date: ${date}` }
         }
       ],
-      allowedMentions: {
-        parse: []
-      }
+      allowedMentions: { parse: [] }
     });
 
     return res.status(200).json({
@@ -179,9 +195,7 @@ app.post("/daily-challenges", async (req, res) => {
           description: body.description || "Daily challenges are now live."
         }
       ],
-      allowedMentions: {
-        parse: ["everyone"]
-      }
+      allowedMentions: { parse: ["everyone"] }
     });
 
     return res.status(200).json({
@@ -266,10 +280,14 @@ app.post("/new-submission", async (req, res) => {
 
 async function syncRankRole(guild, userId, rank) {
   try {
+    const cleanRank = normalizeRank(rank);
     const member = await guild.members.fetch(userId);
-    const newRoleId = rankRoles[rank];
+    const newRoleId = rankRoles[cleanRank];
 
-    if (!newRoleId) return;
+    if (!newRoleId) {
+      console.log(`⚠️ No rank role found for rank: ${cleanRank}`);
+      return;
+    }
 
     for (const roleId of Object.values(rankRoles)) {
       if (member.roles.cache.has(roleId) && roleId !== newRoleId) {
@@ -281,7 +299,7 @@ async function syncRankRole(guild, userId, rank) {
       await member.roles.add(newRoleId);
     }
 
-    console.log(`✅ Synced rank role for ${userId}: ${rank}`);
+    console.log(`✅ Synced rank role for ${userId}: ${cleanRank}`);
   } catch (err) {
     console.error("ROLE SYNC ERROR:", err);
   }
@@ -609,7 +627,7 @@ async function handleClipReview(interaction, action) {
   const rank = data.rank || data.new_rank;
 
   if (action === "approve" && playerId && rank && interaction.guild) {
-    await syncRankRole(interaction.guild, playerId, String(rank).replace("🏅", "").trim());
+    await syncRankRole(interaction.guild, playerId, rank);
   }
 
   const oldEmbed = interaction.message.embeds[0];
