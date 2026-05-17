@@ -63,6 +63,42 @@ async function clearChannelMessages(channel) {
   }
 }
 
+async function clearDailyChallengesChannel() {
+  try {
+    const channel = await client.channels.fetch(DAILY_CHALLENGES_CHANNEL_ID);
+    if (!channel) return;
+
+    await clearChannelMessages(channel);
+
+    console.log("🧹 Daily challenges channel cleared.");
+  } catch (err) {
+    console.error("DAILY CHALLENGE CLEAR ERROR:", err);
+  }
+}
+
+function scheduleDailyChallengeClear() {
+  const now = new Date();
+  const target = new Date();
+
+  target.setHours(18, 0, 0, 0);
+
+  if (now >= target) {
+    target.setDate(target.getDate() + 1);
+  }
+
+  const delay = target.getTime() - now.getTime();
+
+  console.log(`🧹 Daily challenge clear scheduled in ${Math.floor(delay / 1000)} seconds`);
+
+  setTimeout(() => {
+    clearDailyChallengesChannel();
+
+    setInterval(() => {
+      clearDailyChallengesChannel();
+    }, 24 * 60 * 60 * 1000);
+  }, delay);
+}
+
 app.post("/daily-challenges", async (req, res) => {
   try {
     const body = req.body || {};
@@ -288,6 +324,7 @@ client.once("ready", () => {
 
   scheduleDailyShop();
   scheduleSubmissionsOpen();
+  scheduleDailyChallengeClear();
 });
 
 client.on("messageCreate", async (message) => {
